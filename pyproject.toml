@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "glucose-insulin-twin"
+version = "0.1.0"
+description = "Digital Twin of the Glucose-Insulin System (HSLU TA.DIGITALTWIN)"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "matplotlib>=3.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 79
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+
+[tool.pylint.format]
+max-line-length = 79

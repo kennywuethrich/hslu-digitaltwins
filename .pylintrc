@@ -1,0 +1,16 @@
+[FORMAT]
+max-line-length=79
+
+[BASIC]
+# Naming conventions
+function-naming-style=snake_case
+class-naming-style=PascalCase
+variable-naming-style=snake_case
+const-naming-style=UPPER_CASE
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    too-few-public-methods,
+
+    
