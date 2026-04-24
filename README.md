@@ -115,7 +115,7 @@ flowchart LR
     meal[Mahlzeit] --> meal_input[Mahlzeiteninput]
     activity[Aktivität] --> activity_input[Aktivitätseinfluss]
     endogenous[Endogene Insulinproduktion] --> insulin_model[Insulin-Dynamik]
-    exogenous[Exogenes Insulin\n(Pumpe/Spritze)] --> insulin_model
+    exogenous["Exogenes Insulin<br/>(Pumpe/Spritze)"] --> insulin_model
     meal_input --> glucose_model[Glukose-Dynamik]
     activity_input --> glucose_model
     insulin_model --> glucose_model
