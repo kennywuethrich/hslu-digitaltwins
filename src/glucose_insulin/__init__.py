@@ -12,7 +12,23 @@ Typical usage example::
     result = run_simulation(model, meal_glucose_mmol=50.0, duration_min=240)
 """
 
-from glucose_insulin.model import GlucoseInsulinModel
-from glucose_insulin.simulation import SimulationResult, run_simulation
+from glucose_insulin.model import GlucoseInsulinModel, ModelInputs
+from glucose_insulin.plotting import plot_simulation
+from glucose_insulin.simulation import (
+    InputProfiles,
+    SimulationConfig,
+    SimulationResult,
+    run_simulation,
+)
+from glucose_insulin.utils import rectangular_pulse
 
-__all__ = ["GlucoseInsulinModel", "SimulationResult", "run_simulation"]
+__all__ = [
+    "GlucoseInsulinModel",
+    "ModelInputs",
+    "SimulationResult",
+    "SimulationConfig",
+    "InputProfiles",
+    "run_simulation",
+    "plot_simulation",
+    "rectangular_pulse",
+]

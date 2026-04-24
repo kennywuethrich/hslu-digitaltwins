@@ -48,8 +48,7 @@ tests/
     test_model.py     – unit tests (structure, contracts, numerics)
 ```
 
-### Semester Milestones (do not implement ahead of schedule)
-
+### Semester Milestones
 | SW | Topic | Status |
 | --- | --- | --- |
 | SW02 | Model Specification – ODE equations, block diagram | 🔜 |
@@ -59,8 +58,6 @@ tests/
 | SW10 | State estimation (observer), parameter estimation, personalisation | 🔜 |
 | SW11 | Data architecture, data flows, interfaces | 🔜 |
 | SW12 | Full 5D Digital Twin integration | 🔜 |
-
-> ⚠️ `model.py` contains ODE placeholder stubs (returning zeros). Do NOT fill in equations until SW02 model specification is finalised.
 
 ---
 

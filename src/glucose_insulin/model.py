@@ -1,17 +1,21 @@
-"""Compartment model of the glucose-insulin system.
+"""Kompartmentmodell des Glukose-Insulin-Systems.
 
-This module defines the E-DES-inspired grey-box ODE model for the
-glucose-insulin system. The model captures the effect of a meal on
-blood plasma glucose and insulin concentrations.
+Dieses Modul enthält ein bewusst einfaches, gut erklärbares ODE-Modell
+für einen T1D-orientierten Use-Case. Die Eingänge sind getrennt in
+Mahlzeit, Aktivität sowie endogene und exogene Insulinzufuhr.
 
-System overview:
-    Input:  meal glucose equivalent [mmol]
-    States: plasma glucose, plasma insulin, interstitial glucose
-    Output: interstitial glucose [mmol/L]  (CGM measurement)
-
-Note:
-    Model equations are placeholders pending SW02 model specification.
-    Do NOT add equations before the specification is finalised.
+Systemüberblick:
+    Eingänge:
+        - meal_rate [mmol/min]
+        - activity_rate [mmol/L/min]
+        - endogenous_insulin_rate [pmol/L/min]
+        - exogenous_insulin_rate [pmol/L/min]
+    Zustände:
+        - Plasma-Glukose [mmol/L]
+        - Plasma-Insulin [pmol/L]
+        - Interstitielle Glukose [mmol/L]
+    Ausgang:
+        - Interstitielle Glukose [mmol/L] (CGM)
 """
 
 from dataclasses import dataclass, field
@@ -22,47 +26,69 @@ from numpy.typing import NDArray
 
 @dataclass
 class ModelParameters:
-    """Parameters for the glucose-insulin compartment model.
-
-    All parameters are placeholders; values will be identified during
-    the model specification and parameter estimation phases.
+    """Parameter des vereinfachten T1D-Modells.
 
     Attributes:
-        glucose_distribution_volume: Volume of the glucose distribution
-            compartment [L].
-        insulin_distribution_volume: Volume of the insulin distribution
-            compartment [L].
-        glucose_basal: Basal plasma glucose concentration [mmol/L].
-        insulin_basal: Basal plasma insulin concentration [pmol/L].
+        glucose_basal: Basaler Glukosewert Gb [mmol/L].
+        insulin_basal: Basaler Insulinwert Ib [pmol/L].
+        k1: Insulinunabhängiger Glukoseabbau [1/min].
+        k2: Insulineffektivität auf Glukose [1/min].
+        k3: Antwortstärke von Insulin auf Glukoseabweichung [1/min].
+        k4: Insulinabbaurate [1/min].
+        cgm_time_constant_min: Verzögerung Plasma->CGM [min].
     """
 
-    glucose_distribution_volume: float = 1.0  # [L]       – to be identified
-    insulin_distribution_volume: float = 1.0  # [L]       – to be identified
-    glucose_basal: float = 5.0  # [mmol/L]   – typical fasting
-    insulin_basal: float = 60.0  # [pmol/L]   – typical fasting
+    glucose_basal: float = 5.0
+    insulin_basal: float = 10.0
+    k1: float = 0.01
+    k2: float = 0.0005
+    k3: float = 0.5
+    k4: float = 0.05
+    cgm_time_constant_min: float = 12.0
+
+
+@dataclass
+class ModelInputs:
+    """Eingangsgrößen für einen ODE-Auswertungsschritt.
+
+    Attributes:
+        meal_rate: Mahlzeitbedingter Glukoseeintrag [mmol/min].
+        activity_rate: Aktivitätsbedingter Glukoseabzug [mmol/L/min].
+        endogenous_insulin_rate: Endogene Insulinzufuhr [pmol/L/min].
+        exogenous_insulin_rate: Exogene Insulinzufuhr [pmol/L/min].
+    """
+
+    meal_rate: float = 0.0
+    activity_rate: float = 0.0
+    endogenous_insulin_rate: float = 0.0
+    exogenous_insulin_rate: float = 0.0
 
 
 @dataclass
 class GlucoseInsulinModel:
-    """Grey-box compartment model of the glucose-insulin system.
+    """Vereinfachtes Grey-Box-Modell für Glukose und Insulin.
 
-    Implements the ODE right-hand side for numerical integration.
-    The model will be extended incrementally throughout the semester.
+    Die Dynamik folgt der Form:
+
+        dI/dt = k3 * (G - Gb) - k4 * (I - Ib) + I_endogen + I_exogen
+        dG/dt = -k1 * (G - Gb) - k2 * (I - Ib) + Essen - Aktivität
+
+    Zusätzlich wird ein CGM-Zustand als verzögerte Glukosemessung geführt.
 
     Attributes:
-        parameters: Physiological and model parameters.
+        parameters: Modellparameter.
     """
 
     parameters: ModelParameters = field(default_factory=ModelParameters)
 
     def initial_state(self) -> NDArray[np.float64]:
-        """Return the initial state vector at basal equilibrium.
+        """Gibt den Startzustand im Basalpunkt zurück.
 
         Returns:
-            Array of shape (3,) with:
-                [0] plasma glucose    [mmol/L]
-                [1] plasma insulin    [pmol/L]
-                [2] interstitial glucose [mmol/L]
+            Array der Form (3,) mit:
+                [0] Plasma-Glukose [mmol/L]
+                [1] Plasma-Insulin [pmol/L]
+                [2] Interstitielle Glukose [mmol/L]
         """
         p = self.parameters
         return np.array(
@@ -74,36 +100,51 @@ class GlucoseInsulinModel:
         self,
         _time: float,
         state: NDArray[np.float64],
-        meal_rate: float,
+        inputs: ModelInputs,
     ) -> NDArray[np.float64]:
-        """Compute the ODE right-hand side (dx/dt).
+        """Berechnet die rechte Seite der ODEs (dx/dt).
 
         Args:
-            _time: Current simulation time [min]. Unused directly; kept
-                for compatibility with scipy ODE solvers.
-            state: Current state vector [plasma_glucose, plasma_insulin,
-                interstitial_glucose].
-            meal_rate: Glucose appearance rate from meal [mmol/min].
+            _time: Simulationszeit [min], für Solver-Kompatibilität.
+            state: Zustandsvektor [G, I, G_interstitiell].
+            inputs: Eingangsgrößen (Mahlzeit, Aktivität, Insulinraten).
 
         Returns:
-            Derivative vector dx/dt of the same shape as *state*.
-
-        Note:
-            Equations are intentionally left as zeros until the model
-            specification (SW02) is complete.
+            Ableitungsvektor [dG/dt, dI/dt, dG_interstitiell/dt].
         """
-        # TODO (SW02): Replace with derived model equations.
-        _ = state
-        _ = meal_rate
-        return np.zeros(3, dtype=np.float64)
+        p = self.parameters
+        glucose_plasma = float(state[0])
+        insulin_plasma = float(state[1])
+        glucose_interstitial = float(state[2])
+
+        d_insulin = (
+            p.k3 * (glucose_plasma - p.glucose_basal)
+            - p.k4 * (insulin_plasma - p.insulin_basal)
+            + inputs.endogenous_insulin_rate
+            + inputs.exogenous_insulin_rate
+        )
+        d_glucose = (
+            -p.k1 * (glucose_plasma - p.glucose_basal)
+            - p.k2 * (insulin_plasma - p.insulin_basal)
+            + inputs.meal_rate
+            - inputs.activity_rate
+        )
+        d_glucose_interstitial = (
+            glucose_plasma - glucose_interstitial
+        ) / p.cgm_time_constant_min
+
+        return np.array(
+            [d_glucose, d_insulin, d_glucose_interstitial],
+            dtype=np.float64,
+        )
 
     def cgm_output(self, state: NDArray[np.float64]) -> float:
-        """Return the CGM (interstitial glucose) measurement.
+        """Gibt die CGM-Messung (interstitielle Glukose) zurück.
 
         Args:
-            state: Current state vector.
+            state: Aktueller Zustandsvektor.
 
         Returns:
-            Interstitial glucose concentration [mmol/L].
+            Interstitielle Glukosekonzentration [mmol/L].
         """
         return float(state[2])

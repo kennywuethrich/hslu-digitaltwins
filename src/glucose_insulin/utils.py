@@ -1,7 +1,7 @@
-"""Utility functions for the glucose-insulin digital twin.
+"""Hilfsfunktionen für den Glukose-Insulin-Digital-Twin.
 
-Provides unit conversions and simple physiological helper functions
-used across the model and simulation modules.
+Enthält Umrechnungen und einfache Eingangsprofile für Mahlzeiten,
+Aktivität und Insulinabgaben.
 """
 
 import numpy as np
@@ -12,29 +12,29 @@ def meal_glucose_rate(
     total_glucose_mmol: float,
     absorption_rate_min: float = 30.0,
 ) -> float:
-    """Model the glucose appearance rate from a meal as an exponential.
+    """Modelliert die Glukoseaufnahme aus einer Mahlzeit exponentiell.
 
-    Uses a simple first-order absorption model:
+    Verwendet ein einfaches Absorptionsmodell 1. Ordnung:
         Ra(t) = (D / tau) * exp(-t / tau)
 
-    where D is the total glucose dose and tau the absorption time constant.
+    mit D als Gesamtdosis und tau als Zeitkonstante.
 
     Args:
-        time_min: Time since meal ingestion [min]. Must be >= 0.
-        total_glucose_mmol: Total glucose content of the meal [mmol].
-        absorption_rate_min: Absorption time constant tau [min].
-            Defaults to 30.
+        time_min: Zeit seit Mahlzeit [min]. Muss >= 0 sein.
+        total_glucose_mmol: Gesamte Glukosemenge der Mahlzeit [mmol].
+        absorption_rate_min: Absorptionszeitkonstante tau [min].
 
     Returns:
-        Glucose appearance rate [mmol/min] at *time_min*.
+        Glukoseeintragsrate [mmol/min] zum Zeitpunkt *time_min*.
 
     Raises:
-        ValueError: If *total_glucose_mmol* or *absorption_rate_min*
-            are not strictly positive.
+        ValueError: Falls Eingaben unplausibel sind.
     """
-    if total_glucose_mmol <= 0:
+    if time_min < 0:
+        raise ValueError(f"time_min must be >= 0, got {time_min}")
+    if total_glucose_mmol < 0:
         raise ValueError(
-            f"total_glucose_mmol must be positive, got {total_glucose_mmol}"
+            "total_glucose_mmol must be >= 0, " f"got {total_glucose_mmol}"
         )
     if absorption_rate_min <= 0:
         raise ValueError(
@@ -46,7 +46,7 @@ def meal_glucose_rate(
 
 
 def mmol_per_l_to_mg_per_dl(value_mmol_l: float) -> float:
-    """Convert blood glucose from mmol/L to mg/dL.
+    """Konvertiert Blutglukose von mmol/L nach mg/dL.
 
     Args:
         value_mmol_l: Glucose concentration [mmol/L].
@@ -58,7 +58,7 @@ def mmol_per_l_to_mg_per_dl(value_mmol_l: float) -> float:
 
 
 def mg_per_dl_to_mmol_per_l(value_mg_dl: float) -> float:
-    """Convert blood glucose from mg/dL to mmol/L.
+    """Konvertiert Blutglukose von mg/dL nach mmol/L.
 
     Args:
         value_mg_dl: Glucose concentration [mg/dL].
@@ -67,3 +67,35 @@ def mg_per_dl_to_mmol_per_l(value_mg_dl: float) -> float:
         Glucose concentration [mmol/L].
     """
     return value_mg_dl / 18.0182
+
+
+def rectangular_pulse(
+    time_min: float,
+    start_min: float,
+    end_min: float,
+    height: float,
+) -> float:
+    """Gibt ein rechteckiges Eingangsprofil zurück.
+
+    Das Profil ist zwischen *start_min* und *end_min* konstant *height*.
+    Außerhalb dieses Intervalls ist der Wert null.
+
+    Args:
+        time_min: Aktuelle Zeit [min].
+        start_min: Startzeit [min].
+        end_min: Endzeit [min]. Muss > start_min sein.
+        height: Höhe des Pulses in der jeweiligen Eingangs-Einheit.
+
+    Returns:
+        Profilwert zum Zeitpunkt *time_min*.
+
+    Raises:
+        ValueError: Falls *end_min* <= *start_min*.
+    """
+    if end_min <= start_min:
+        raise ValueError(
+            f"end_min must be > start_min, got {end_min} <= {start_min}"
+        )
+    if start_min <= time_min <= end_min:
+        return height
+    return 0.0

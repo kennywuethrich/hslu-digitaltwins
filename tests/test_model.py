@@ -5,15 +5,23 @@ the model and utility functions. Full physiological validation will be
 added in SW10 once model equations are finalised.
 """
 
-import numpy as np
 import pytest
 
-from glucose_insulin.model import GlucoseInsulinModel, ModelParameters
-from glucose_insulin.simulation import run_simulation
+from glucose_insulin.model import (
+    GlucoseInsulinModel,
+    ModelInputs,
+    ModelParameters,
+)
+from glucose_insulin.simulation import (
+    InputProfiles,
+    SimulationConfig,
+    run_simulation,
+)
 from glucose_insulin.utils import (
     meal_glucose_rate,
     mg_per_dl_to_mmol_per_l,
     mmol_per_l_to_mg_per_dl,
+    rectangular_pulse,
 )
 
 
@@ -51,8 +59,24 @@ class TestGlucoseInsulinModel:
         """ODE right-hand side must return vector of same shape as state."""
         model = GlucoseInsulinModel()
         x0 = model.initial_state()
-        dxdt = model.odes(0.0, x0, meal_rate=0.0)
+        dxdt = model.odes(0.0, x0, inputs=ModelInputs())
         assert dxdt.shape == x0.shape
+
+    def test_activity_reduces_glucose_derivative(self) -> None:
+        """Activity input must reduce glucose derivative in dG/dt."""
+        model = GlucoseInsulinModel()
+        x0 = model.initial_state()
+        with_activity = model.odes(
+            0.0,
+            x0,
+            inputs=ModelInputs(meal_rate=1.0, activity_rate=0.4),
+        )
+        without_activity = model.odes(
+            0.0,
+            x0,
+            inputs=ModelInputs(meal_rate=1.0, activity_rate=0.0),
+        )
+        assert with_activity[0] < without_activity[0]
 
     def test_cgm_output_returns_interstitial(self) -> None:
         """CGM output must equal the interstitial glucose state."""
@@ -67,15 +91,35 @@ class TestSimulation:
     def test_run_simulation_output_length(self) -> None:
         """Result arrays must have the requested number of points."""
         model = GlucoseInsulinModel()
-        result = run_simulation(model, meal_glucose_mmol=50.0, n_points=100)
+        result = run_simulation(
+            model,
+            config=SimulationConfig(meal_glucose_mmol=50.0, n_points=100),
+        )
         assert len(result.time_min) == 100
         assert len(result.cgm_glucose) == 100
 
     def test_run_simulation_time_starts_at_zero(self) -> None:
         """Simulation time must start at t=0."""
         model = GlucoseInsulinModel()
-        result = run_simulation(model, meal_glucose_mmol=50.0)
+        result = run_simulation(
+            model,
+            config=SimulationConfig(meal_glucose_mmol=50.0),
+        )
         assert result.time_min[0] == pytest.approx(0.0)
+
+    def test_run_simulation_with_activity_profile(self) -> None:
+        """Simulation must accept external activity profile callback."""
+        model = GlucoseInsulinModel()
+
+        def activity_rate(_time_min: float) -> float:
+            return 0.05
+
+        result = run_simulation(
+            model,
+            config=SimulationConfig(meal_glucose_mmol=50.0),
+            profiles=InputProfiles(activity_rate_fn=activity_rate),
+        )
+        assert len(result.time_min) == 500
 
 
 class TestUtils:
@@ -103,9 +147,20 @@ class TestUtils:
         with pytest.raises(ValueError):
             meal_glucose_rate(0.0, total_glucose_mmol=-10.0)
 
+    def test_meal_glucose_rate_zero_dose_is_zero(self) -> None:
+        """Zero meal dose must yield zero glucose rate."""
+        assert meal_glucose_rate(0.0, total_glucose_mmol=0.0) == 0.0
+
     def test_unit_conversion_roundtrip(self) -> None:
         """mmol/L → mg/dL → mmol/L must be a lossless roundtrip."""
         original = 5.5
         converted = mmol_per_l_to_mg_per_dl(original)
         restored = mg_per_dl_to_mmol_per_l(converted)
         assert restored == pytest.approx(original, rel=1e-9)
+
+    def test_rectangular_pulse_inside_interval(self) -> None:
+        """Pulse must return height inside the configured interval."""
+        value = rectangular_pulse(
+            10.0, start_min=5.0, end_min=15.0, height=2.0
+        )
+        assert value == pytest.approx(2.0)
