@@ -49,15 +49,15 @@ tests/
 ```
 
 ### Semester Milestones
-| SW | Topic | Status |
-| --- | --- | --- |
-| SW02 | Model Specification – ODE equations, block diagram | 🔜 |
-| SW03 | DT Requirements, System Decomposition, 5D Architecture | 🔜 |
-| SW04 | State machine (insulin pump), behaviour models (meal, activity) | 🔜 |
-| SW08 | Insulin pump use case, DT-based development | 🔜 |
-| SW10 | State estimation (observer), parameter estimation, personalisation | 🔜 |
-| SW11 | Data architecture, data flows, interfaces | 🔜 |
-| SW12 | Full 5D Digital Twin integration | 🔜 |
+| SW | Topic |
+| --- | --- |
+| SW02 | Model Specification – ODE equations, block diagram |
+| SW03 | DT Requirements, System Decomposition, 5D Architecture |
+| SW04 | State machine (insulin pump), behaviour models (meal, activity) |
+| SW08 | Insulin pump use case, DT-based development |
+| SW10 | State estimation (observer), parameter estimation, personalisation |
+| SW11 | Data architecture, data flows, interfaces |
+| SW12 | Full 5D Digital Twin integration |
 
 ---
 

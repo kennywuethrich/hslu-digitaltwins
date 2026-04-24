@@ -7,6 +7,8 @@ added in SW10 once model equations are finalised.
 
 import pytest
 
+from config.metrics import glucose_metrics
+from config.scenarios import build_runtime, preset_values
 from glucose_insulin.model import (
     GlucoseInsulinModel,
     ModelInputs,
@@ -164,3 +166,30 @@ class TestUtils:
             10.0, start_min=5.0, end_min=15.0, height=2.0
         )
         assert value == pytest.approx(2.0)
+
+
+class TestScenarioRuntime:
+    """Tests für die zentrale Szenario->Runtime-Abbildung."""
+
+    def test_build_runtime_uses_given_n_points(self) -> None:
+        """Runtime builder must propagate n_points to simulation config."""
+        values = preset_values("Mahlzeit mit Bewegung")
+        runtime = build_runtime(values, n_points=123)
+        assert runtime.simulation_config.n_points == 123
+
+
+class TestMetrics:
+    """Tests für zentrale Ergebnis-Metriken."""
+
+    def test_glucose_metrics_returns_consistent_values(self) -> None:
+        """Metric helper must return consistent max/min/end values."""
+        model = GlucoseInsulinModel()
+        result = run_simulation(
+            model,
+            config=SimulationConfig(meal_glucose_mmol=50.0, n_points=50),
+        )
+        summary = glucose_metrics(result)
+        assert summary.max_glucose_mmol_l >= summary.min_glucose_mmol_l
+        assert summary.end_glucose_mmol_l == pytest.approx(
+            float(result.plasma_glucose[-1])
+        )
