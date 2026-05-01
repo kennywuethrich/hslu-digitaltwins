@@ -1,111 +1,126 @@
-"""Interaktive Streamlit-App für das T1D-Basismodell.
+"""Streamlit-App für den Digital-Shadow-Use-Case.
 
 Start:
     streamlit run app.py
 """
 
+from pathlib import Path
+
+import numpy as np
 import streamlit as st
 
 from bootstrap import add_src_to_path
 
 add_src_to_path()
 
-from config.metrics import glucose_metrics
-from config.scenarios import (
-    build_runtime,
-    list_preset_names,
-    preset_values,
-)
-from config.ui_config import SLIDER_SPECS
 from glucose_insulin.model import GlucoseInsulinModel
-from glucose_insulin.plotting import build_simulation_figure
-from glucose_insulin.simulation import run_simulation
+from glucose_insulin.plotting import (
+    build_daily_glucose_overlay_figure,
+    build_policy_figure,
+)
+from glucose_insulin.preprocessing import (
+    derivatives,
+    load_cgm_series,
+    moving_average,
+)
+
+DATA_PATH = Path(__file__).resolve().parent / "data" / "CGM_Werte.csv"
 
 
-def slider_value(values: dict[str, float], key: str) -> float:
-    """Liest einen Sliderwert anhand der zentralen UI-Konfiguration."""
-    spec = SLIDER_SPECS[key]
-    kwargs: dict[str, object] = {
-        "label": spec.label,
-        "min_value": spec.min_value,
-        "max_value": spec.max_value,
-        "value": float(values[key]),
-        "step": spec.step,
-    }
-    if spec.number_format is not None:
-        kwargs["format"] = spec.number_format
-    return float(st.sidebar.slider(**kwargs))
+def _run_use_case_1(time_min: np.ndarray, glucose_mmol_l: np.ndarray):
+    """Berechnet den autonomen Insulinverlauf für UseCase 1."""
+    model = GlucoseInsulinModel(
+        target_mmol_l=float(np.median(glucose_mmol_l)),
+        kp=0.25,
+        max_rate=5.0,
+        prediction_horizon_min=15.0,
+    )
+    return model.build_profile(time_min, glucose_mmol_l)
+
+
+def _run_use_case_2(time_min: np.ndarray, glucose_mmol_l: np.ndarray):
+    """Berechnet den assistiven Insulinverlauf für UseCase 2."""
+
+    def patient_profile(current_time_min: float) -> float:
+        if current_time_min < float(time_min[-1]) * 0.35:
+            return 1.5
+        return 0.0
+
+    model = GlucoseInsulinModel(
+        patient_profile=patient_profile,
+        alert_threshold=float(np.percentile(glucose_mmol_l, 80)),
+        kp=0.18,
+        max_rate=5.0,
+        prediction_horizon_min=15.0,
+    )
+    return model.build_profile(time_min, glucose_mmol_l)
 
 
 def main() -> None:
-    """Rendert die interaktive Oberfläche."""
-    st.set_page_config(page_title="T1D Digital Twin", layout="wide")
-    st.title("Interaktive T1D-Simulation")
+    """Rendert die datengetriebene Oberfläche."""
+    st.set_page_config(page_title="Digital Shadow", layout="wide")
+    st.title("Glukose-Insulin Digital Shadow")
     st.caption(
-        "Einfache, erklärbare Oberfläche auf Basis des bestehenden"
-        " ODE-Modells."
+        "Die App verwendet die reale CGM-Zeitreihe und zeigt zwei UseCases: "
+        "autonome Insulinabgabe und assistive Eingriffe bei Vergessen."
     )
 
-    preset_name = st.sidebar.selectbox(
-        "Szenario-Preset",
-        list_preset_names(),
-    )
-    values = preset_values(preset_name)
-
-    st.sidebar.subheader("Use-Case")
-    values["meal_glucose_mmol"] = slider_value(values, "meal_glucose_mmol")
-    values["absorption_rate_min"] = slider_value(
-        values,
-        "absorption_rate_min",
-    )
-    values["duration_min"] = slider_value(values, "duration_min")
-
-    st.sidebar.subheader("Aktivität")
-    values["activity_start_min"] = slider_value(values, "activity_start_min")
-    values["activity_end_min"] = slider_value(values, "activity_end_min")
-    values["activity_height"] = slider_value(values, "activity_height")
-
-    st.sidebar.subheader("Exogenes Insulin")
-    values["insulin_start_min"] = slider_value(values, "insulin_start_min")
-    values["insulin_end_min"] = slider_value(values, "insulin_end_min")
-    values["insulin_height"] = slider_value(values, "insulin_height")
-
-    st.sidebar.subheader("Modellparameter")
-    values["k1"] = slider_value(values, "k1")
-    values["k2"] = slider_value(values, "k2")
-    values["k3"] = slider_value(values, "k3")
-    values["k4"] = slider_value(values, "k4")
-    values["endogenous_insulin_height"] = slider_value(
-        values,
-        "endogenous_insulin_height",
+    series = load_cgm_series(DATA_PATH)
+    smoothed_glucose = moving_average(series.glucose_mmol_l, window=5)
+    first_derivative, second_derivative = derivatives(
+        series.time_min,
+        smoothed_glucose,
     )
 
-    invalid_activity_window = (
-        values["activity_end_min"] <= values["activity_start_min"]
+    st.info(
+        "Der Plot passt sich automatisch an die geladene Zeitreihe an. "
+        "Es gibt keine festen Slider für Simulationsdauer oder Modellparameter."
     )
-    invalid_insulin_window = (
-        values["insulin_end_min"] <= values["insulin_start_min"]
-    )
-    if invalid_activity_window or invalid_insulin_window:
-        st.error("Bitte Start/Ende so wählen, dass Ende > Start ist.")
-        return
 
-    runtime = build_runtime(values, n_points=600)
-    model = GlucoseInsulinModel(parameters=runtime.model_parameters)
-    result = run_simulation(
-        model=model,
-        config=runtime.simulation_config,
-        profiles=runtime.input_profiles,
+    use_case = st.radio(
+        "UseCase",
+        ["UseCase 1: autonom", "UseCase 2: assistiv"],
+        horizontal=True,
     )
-    summary = glucose_metrics(result)
 
-    figure = build_simulation_figure(result)
+    if use_case == "UseCase 1: autonom":
+        insulin_rate = _run_use_case_1(series.time_min, smoothed_glucose)
+        st.subheader("UseCase 1: Autonome Insulinregelung")
+        st.write(
+            "Das System dosiert selbstständig anhand des aktuellen Verlaufs "
+            "und einer kurzen Vorhersage über 15 Minuten."
+        )
+    else:
+        insulin_rate = _run_use_case_2(series.time_min, smoothed_glucose)
+        st.subheader("UseCase 2: Assistive Insulinregelung")
+        st.write(
+            "Der Patient gibt zunächst selbst Insulin ab, danach greift das "
+            "System bei Vergessen oder hohem Glukosetrend ein."
+        )
+
+    figure = build_policy_figure(
+        series.time_min,
+        series.glucose_mmol_l,
+        insulin_rate,
+    )
     st.pyplot(figure, clear_figure=True)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Max Glukose [mmol/L]", f"{summary.max_glucose_mmol_l:.2f}")
-    c2.metric("Min Glukose [mmol/L]", f"{summary.min_glucose_mmol_l:.2f}")
-    c3.metric("Endwert Glukose [mmol/L]", f"{summary.end_glucose_mmol_l:.2f}")
+    daily_figure = build_daily_glucose_overlay_figure(
+        series.timestamps,
+        series.glucose_mmol_l,
+    )
+    st.pyplot(daily_figure, clear_figure=True)
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Messung Start [mmol/L]", f"{series.glucose_mmol_l[0]:.2f}")
+    col2.metric("Messung Ende [mmol/L]", f"{series.glucose_mmol_l[-1]:.2f}")
+    col3.metric("Steigung Ende", f"{float(first_derivative[-1]):.3f}")
+    col4.metric("Krümmung Ende", f"{float(second_derivative[-1]):.3f}")
+
+    st.caption(
+        "Hinweis: Die Simulation ist ein vereinfachter Digital Shadow und "
+        "kein validierter medizinischer Zwilling."
+    )
 
 
 if __name__ == "__main__":

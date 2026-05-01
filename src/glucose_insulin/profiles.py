@@ -1,7 +1,7 @@
-"""Hilfsfunktionen für den Glukose-Insulin-Digital-Twin.
+"""Einfache Eingangsprofile für den Glukose-Insulin-Digital-Twin.
 
-Enthält Umrechnungen und einfache Eingangsprofile für Mahlzeiten,
-Aktivität und Insulinabgaben.
+Dieses Modul enthält kleine, wiederverwendbare Profile für Mahlzeiten
+und rechteckige Signale.
 """
 
 import numpy as np
@@ -25,7 +25,7 @@ def meal_glucose_rate(
         absorption_rate_min: Absorptionszeitkonstante tau [min].
 
     Returns:
-        Glukoseeintragsrate [mmol/min] zum Zeitpunkt *time_min*.
+        Glukoseeintragsrate [mmol/min] zum Zeitpunkt time_min.
 
     Raises:
         ValueError: Falls Eingaben unplausibel sind.
@@ -45,30 +45,6 @@ def meal_glucose_rate(
     return float((total_glucose_mmol / tau) * np.exp(-time_min / tau))
 
 
-def mmol_per_l_to_mg_per_dl(value_mmol_l: float) -> float:
-    """Konvertiert Blutglukose von mmol/L nach mg/dL.
-
-    Args:
-        value_mmol_l: Glucose concentration [mmol/L].
-
-    Returns:
-        Glucose concentration [mg/dL].
-    """
-    return value_mmol_l * 18.0182
-
-
-def mg_per_dl_to_mmol_per_l(value_mg_dl: float) -> float:
-    """Konvertiert Blutglukose von mg/dL nach mmol/L.
-
-    Args:
-        value_mg_dl: Glucose concentration [mg/dL].
-
-    Returns:
-        Glucose concentration [mmol/L].
-    """
-    return value_mg_dl / 18.0182
-
-
 def rectangular_pulse(
     time_min: float,
     start_min: float,
@@ -77,7 +53,7 @@ def rectangular_pulse(
 ) -> float:
     """Gibt ein rechteckiges Eingangsprofil zurück.
 
-    Das Profil ist zwischen *start_min* und *end_min* konstant *height*.
+    Das Profil ist zwischen start_min und end_min konstant height.
     Außerhalb dieses Intervalls ist der Wert null.
 
     Args:
@@ -87,10 +63,10 @@ def rectangular_pulse(
         height: Höhe des Pulses in der jeweiligen Eingangs-Einheit.
 
     Returns:
-        Profilwert zum Zeitpunkt *time_min*.
+        Profilwert zum Zeitpunkt time_min.
 
     Raises:
-        ValueError: Falls *end_min* <= *start_min*.
+        ValueError: Falls end_min <= start_min.
     """
     if end_min <= start_min:
         raise ValueError(
@@ -99,3 +75,6 @@ def rectangular_pulse(
     if start_min <= time_min <= end_min:
         return height
     return 0.0
+
+
+__all__ = ["meal_glucose_rate", "rectangular_pulse"]

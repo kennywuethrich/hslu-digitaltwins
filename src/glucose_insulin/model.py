@@ -1,150 +1,124 @@
-"""Kompartmentmodell des Glukose-Insulin-Systems.
+"""Direktes Modell für Insulinentscheidungen aus CGM-Daten.
 
-Dieses Modul enthält ein bewusst einfaches, gut erklärbares ODE-Modell
-für einen T1D-orientierten Use-Case. Die Eingänge sind getrennt in
-Mahlzeit, Aktivität sowie endogene und exogene Insulinzufuhr.
-
-Systemüberblick:
-    Eingänge:
-        - meal_rate [mmol/min]
-        - activity_rate [mmol/L/min]
-        - endogenous_insulin_rate [pmol/L/min]
-        - exogenous_insulin_rate [pmol/L/min]
-    Zustände:
-        - Plasma-Glukose [mmol/L]
-        - Plasma-Insulin [pmol/L]
-        - Interstitielle Glukose [mmol/L]
-    Ausgang:
-        - Interstitielle Glukose [mmol/L] (CGM)
+Das Modul enthält kein physiologisches ODE-Modell mehr. Es nimmt die
+gemessene Glukose-Zeitreihe als Eingang und berechnet daraus direkt
+eine Insulin-Zeitreihe auf Basis von Glukose, erster und zweiter
+Ableitung sowie einer kurzen Vorhersage.
 """
 
 from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 import numpy as np
 from numpy.typing import NDArray
 
-
-@dataclass
-class ModelParameters:
-    """Parameter des vereinfachten T1D-Modells.
-
-    Attributes:
-        glucose_basal: Basaler Glukosewert Gb [mmol/L].
-        insulin_basal: Basaler Insulinwert Ib [pmol/L].
-        k1: Insulinunabhängiger Glukoseabbau [1/min].
-        k2: Insulineffektivität auf Glukose [1/min].
-        k3: Antwortstärke von Insulin auf Glukoseabweichung [1/min].
-        k4: Insulinabbaurate [1/min].
-        cgm_time_constant_min: Verzögerung Plasma->CGM [min].
-    """
-
-    glucose_basal: float = 5.0
-    insulin_basal: float = 10.0
-    k1: float = 0.01
-    k2: float = 0.0005
-    k3: float = 0.5
-    k4: float = 0.05
-    cgm_time_constant_min: float = 12.0
-
-
-@dataclass
-class ModelInputs:
-    """Eingangsgrößen für einen ODE-Auswertungsschritt.
-
-    Attributes:
-        meal_rate: Mahlzeitbedingter Glukoseeintrag [mmol/min].
-        activity_rate: Aktivitätsbedingter Glukoseabzug [mmol/L/min].
-        endogenous_insulin_rate: Endogene Insulinzufuhr [pmol/L/min].
-        exogenous_insulin_rate: Exogene Insulinzufuhr [pmol/L/min].
-    """
-
-    meal_rate: float = 0.0
-    activity_rate: float = 0.0
-    endogenous_insulin_rate: float = 0.0
-    exogenous_insulin_rate: float = 0.0
+PatientProfile = Callable[[float], float]
 
 
 @dataclass
 class GlucoseInsulinModel:
-    """Vereinfachtes Grey-Box-Modell für Glukose und Insulin.
+    """Einfache CGM-zu-Insulin-Policy.
 
-    Die Dynamik folgt der Form:
-
-        dI/dt = k3 * (G - Gb) - k4 * (I - Ib) + I_endogen + I_exogen
-        dG/dt = -k1 * (G - Gb) - k2 * (I - Ib) + Essen - Aktivität
-
-    Zusätzlich wird ein CGM-Zustand als verzögerte Glukosemessung geführt.
-
-    Attributes:
-        parameters: Modellparameter.
+    Die Klasse hält nur die minimale Historie, die für Ableitung und
+    Kurzvorhersage nötig ist.
     """
 
-    parameters: ModelParameters = field(default_factory=ModelParameters)
+    target_mmol_l: float = 6.0
+    kp: float = 0.1
+    max_rate: float = 5.0
+    hypo_block: float = 3.5
+    alert_threshold: float = 8.5
+    use_prediction: bool = True
+    prediction_horizon_min: float = 15.0
+    patient_profile: PatientProfile | None = None
 
-    def initial_state(self) -> NDArray[np.float64]:
-        """Gibt den Startzustand im Basalpunkt zurück.
+    _last_time: Optional[float] = None
+    _last_glucose: Optional[float] = None
+    _last_g1: Optional[float] = None
+
+    def __call__(self, time_min: float, glucose_mmol_l: float) -> float:
+        """Berechnet die Insulinrate für einen Zeitpunkt.
+
+        Args:
+            time_min: Zeit [min].
+            glucose_mmol_l: Gemessene Glukose [mmol/L].
 
         Returns:
-            Array der Form (3,) mit:
-                [0] Plasma-Glukose [mmol/L]
-                [1] Plasma-Insulin [pmol/L]
-                [2] Interstitielle Glukose [mmol/L]
+            Insulinrate [pmol/L/min].
         """
-        p = self.parameters
-        return np.array(
-            [p.glucose_basal, p.insulin_basal, p.glucose_basal],
-            dtype=np.float64,
-        )
+        glucose_cgm = float(glucose_mmol_l)
+        patient_rate = 0.0
+        if self.patient_profile is not None:
+            patient_rate = float(self.patient_profile(time_min))
+            if patient_rate > 0.0:
+                self._last_time = float(time_min)
+                self._last_glucose = glucose_cgm
+                self._last_g1 = None
+                return patient_rate
 
-    def odes(
+        g1 = 0.0
+        g2 = 0.0
+        if self._last_time is not None and self._last_glucose is not None:
+            dt = float(time_min - self._last_time)
+            if dt > 0.0:
+                g1 = (glucose_cgm - self._last_glucose) / dt
+                if self._last_g1 is not None:
+                    g2 = (g1 - self._last_g1) / dt
+
+        self._last_time = float(time_min)
+        self._last_glucose = glucose_cgm
+        self._last_g1 = g1
+
+        glucose_for_decision = glucose_cgm
+        if self.use_prediction:
+            horizon = float(self.prediction_horizon_min)
+            glucose_for_decision = (
+                glucose_cgm + g1 * horizon + 0.5 * g2 * horizon * horizon
+            )
+
+        if glucose_for_decision < self.hypo_block:
+            return 0.0
+
+        threshold = (
+            self.target_mmol_l
+            if self.patient_profile is None
+            else self.alert_threshold
+        )
+        error = glucose_for_decision - threshold
+        if error <= 0.0:
+            return 0.0
+
+        rate = self.kp * error
+        return float(min(rate, self.max_rate))
+
+    def build_profile(
         self,
-        _time: float,
-        state: NDArray[np.float64],
-        inputs: ModelInputs,
+        time_min: NDArray[np.float64],
+        glucose_mmol_l: NDArray[np.float64],
     ) -> NDArray[np.float64]:
-        """Berechnet die rechte Seite der ODEs (dx/dt).
+        """Berechnet eine vollständige Insulin-Zeitreihe.
 
         Args:
-            _time: Simulationszeit [min], für Solver-Kompatibilität.
-            state: Zustandsvektor [G, I, G_interstitiell].
-            inputs: Eingangsgrößen (Mahlzeit, Aktivität, Insulinraten).
+            time_min: Zeitvektor [min].
+            glucose_mmol_l: Glukosewerte [mmol/L].
 
         Returns:
-            Ableitungsvektor [dG/dt, dI/dt, dG_interstitiell/dt].
+            Insulinzeitreihe [pmol/L/min].
         """
-        p = self.parameters
-        glucose_plasma = float(state[0])
-        insulin_plasma = float(state[1])
-        glucose_interstitial = float(state[2])
+        if time_min.shape != glucose_mmol_l.shape:
+            raise ValueError(
+                "time_min and glucose_mmol_l must have same shape"
+            )
 
-        d_insulin = (
-            p.k3 * (glucose_plasma - p.glucose_basal)
-            - p.k4 * (insulin_plasma - p.insulin_basal)
-            + inputs.endogenous_insulin_rate
-            + inputs.exogenous_insulin_rate
-        )
-        d_glucose = (
-            -p.k1 * (glucose_plasma - p.glucose_basal)
-            - p.k2 * (insulin_plasma - p.insulin_basal)
-            + inputs.meal_rate
-            - inputs.activity_rate
-        )
-        d_glucose_interstitial = (
-            glucose_plasma - glucose_interstitial
-        ) / p.cgm_time_constant_min
+        self._last_time = None
+        self._last_glucose = None
+        self._last_g1 = None
 
-        return np.array(
-            [d_glucose, d_insulin, d_glucose_interstitial],
-            dtype=np.float64,
-        )
-
-    def cgm_output(self, state: NDArray[np.float64]) -> float:
-        """Gibt die CGM-Messung (interstitielle Glukose) zurück.
-
-        Args:
-            state: Aktueller Zustandsvektor.
-
-        Returns:
-            Interstitielle Glukosekonzentration [mmol/L].
-        """
-        return float(state[2])
+        insulin_rate = np.zeros_like(glucose_mmol_l, dtype=np.float64)
+        for index, (current_time, current_glucose) in enumerate(
+            zip(time_min, glucose_mmol_l, strict=True)
+        ):
+            insulin_rate[index] = self(
+                float(current_time), float(current_glucose)
+            )
+        return insulin_rate

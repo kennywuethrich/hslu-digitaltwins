@@ -1,36 +1,81 @@
-"""Einfache Demo für das T1D-Basismodell.
+"""Einfache Demo für den Digital-Shadow-Use-Case.
 
 Start:
     python demo.py
 """
 
+from pathlib import Path
+
+import numpy as np
+import matplotlib.pyplot as plt
+
 from bootstrap import add_src_to_path
 
 add_src_to_path()
 
-from config.scenarios import (
-    DEFAULT_SCENARIO,
-    build_runtime,
-    preset_values,
-)
 from glucose_insulin.model import GlucoseInsulinModel
-from glucose_insulin.plotting import plot_simulation
-from glucose_insulin.simulation import run_simulation
+from glucose_insulin.plotting import (
+    build_daily_glucose_overlay_figure,
+    build_policy_figure,
+)
+from glucose_insulin.preprocessing import load_cgm_series
+
+DATA_PATH = Path(__file__).resolve().parent / "data" / "CGM_Werte.csv"
+
+
+def _run_autonomous(series_time_min: np.ndarray, series_glucose: np.ndarray):
+    """Berechnet UseCase 1 mit autonomer Insulingabe."""
+    model = GlucoseInsulinModel(target_mmol_l=6.0, kp=0.25)
+    return model.build_profile(series_time_min, series_glucose)
+
+
+def _run_assistive(series_time_min: np.ndarray, series_glucose: np.ndarray):
+    """Berechnet UseCase 2 mit assistiver Eingabe."""
+
+    def patient_profile(current_time_min: float) -> float:
+        if current_time_min < float(series_time_min[-1]) * 0.35:
+            return 1.5
+        return 0.0
+
+    model = GlucoseInsulinModel(
+        patient_profile=patient_profile,
+        alert_threshold=8.0,
+        kp=0.18,
+    )
+    return model.build_profile(series_time_min, series_glucose)
 
 
 def main() -> None:
-    """Startet eine alltagsnahe Beispielsimulation."""
-    values = preset_values(DEFAULT_SCENARIO)
-    runtime = build_runtime(values, n_points=500)
+    """Startet beide UseCases mit der echten CGM-Zeitreihe."""
+    series = load_cgm_series(DATA_PATH)
 
-    model = GlucoseInsulinModel(parameters=runtime.model_parameters)
-
-    result = run_simulation(
-        model=model,
-        config=runtime.simulation_config,
-        profiles=runtime.input_profiles,
+    insulin_one = _run_autonomous(series.time_min, series.glucose_mmol_l)
+    figure_one = build_policy_figure(
+        series.time_min,
+        series.glucose_mmol_l,
+        insulin_one,
     )
-    plot_simulation(result)
+    figure_one.suptitle("UseCase 1: autonome Insulingabe")
+    plt.show()
+    plt.close(figure_one)
+
+    daily_figure = build_daily_glucose_overlay_figure(
+        series.timestamps,
+        series.glucose_mmol_l,
+    )
+    daily_figure.suptitle("Tagesprofil: Glukose")
+    plt.show()
+    plt.close(daily_figure)
+
+    insulin_two = _run_assistive(series.time_min, series.glucose_mmol_l)
+    figure_two = build_policy_figure(
+        series.time_min,
+        series.glucose_mmol_l,
+        insulin_two,
+    )
+    figure_two.suptitle("UseCase 2: assistive Insulingabe")
+    plt.show()
+    plt.close(figure_two)
 
 
 if __name__ == "__main__":

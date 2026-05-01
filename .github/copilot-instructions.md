@@ -1,4 +1,22 @@
-# Copilot Instructions – HSLU TA.DIGITALTWIN: Glucose-Insulin Digital Twin
+# Copilot Instructions – HSLU TA.DIGITALTWIN: Glucose-Insulin Digital Shadow
+Nutze für das gesamte Projekt die folgenden Anweisungen, um den Code zu generieren. Alle Anweisungen müssen strikt befolgt werden, um die Konsistenz und Qualität des Codes sicherzustellen.
+Nutze das Python Conda venv "dgtwins".
+
+## Projekt Informationen
+Wir modellieren einen Digital Shadow auf Basis realer CGM-Zeitreihen aus `./data/CGM_Werte.csv`. Ziel ist nicht ein vollständiger Digital Twin, sondern eine einfache, nachvollziehbare Simulation für die Insulin-Dosierung anhand der Glukoseentwicklung.
+
+Es gibt zwei UseCases:
+
+### UseCase 1
+Das System dosiert Insulin autonom, wenn die Glukose ansteigt oder eine Vorhersage auf einen kritischen Verlauf hindeutet.
+
+### UseCase 2
+Der Patient dosiert zunächst selbst. Wenn er vergisst oder ein Schwellwert überschritten wird, greift das System ein.
+
+Für die Entscheidung werden die erste und zweite Ableitung der Glukose-Zeitreihe sowie eine kurze Vorhersage verwendet.
+
+### Ziel
+Das Projekt soll einen verständlichen Digital Shadow zeigen: reale Glukosemessung rein, vereinfachte Insulin-Entscheidung raus, inklusive Visualisierung.
 
 ## Quick Start (Verification)
 
@@ -27,37 +45,34 @@ All four tools must pass before committing.
 
 **Module:** TA.DIGITALTWIN – Digital Twins and Products  
 **Institution:** Hochschule Luzern, Technik & Architektur  
-**Goal:** Build a Digital Twin of the human glucose-insulin system using a low-order grey-box compartment model (E-DES-inspired).
+**Goal:** Build a simple, explainable Digital Shadow for the glucose-insulin system using real CGM data and a direct CGM-to-insulin policy.
 
 ### Domain
 
 - **Physical Entity:** Human glucose-insulin system
-- **System Input:** Meal glucose equivalent [mmol]
-- **System Output:** Interstitial glucose concentration [mmol/L] (CGM measurement)
-- **Model Type:** Grey-box ODE compartment model (low-order, physiologically motivated)
+- **System Input:** CGM-Zeitreihe und daraus abgeleitete Insulin-Entscheidung
+- **System Output:** Visualisierung von CGM, Insulin und Trend
+- **Model Type:** Direct CGM-to-insulin policy based on glucose trend and short-term prediction
 
 ### Package Structure
 
 ```
 src/glucose_insulin/
     __init__.py       – public API exports
-    model.py          – ODE compartment model (GlucoseInsulinModel, ModelParameters)
-    simulation.py     – simulation runner (run_simulation, SimulationResult)
-    utils.py          – unit conversions and helper functions
+    model.py          – direct CGM-to-insulin policy
+    preprocessing.py  – CGM loader, smoothing and derivatives
+    plotting.py       – dynamic Matplotlib visualisation
 tests/
-    test_model.py     – unit tests (structure, contracts, numerics)
+    test_model.py     – policy and utility tests
+    test_preprocessing.py  – preprocessing tests
 ```
 
-### Semester Milestones
-| SW | Topic |
-| --- | --- |
-| SW02 | Model Specification – ODE equations, block diagram |
-| SW03 | DT Requirements, System Decomposition, 5D Architecture |
-| SW04 | State machine (insulin pump), behaviour models (meal, activity) |
-| SW08 | Insulin pump use case, DT-based development |
-| SW10 | State estimation (observer), parameter estimation, personalisation |
-| SW11 | Data architecture, data flows, interfaces |
-| SW12 | Full 5D Digital Twin integration |
+### Current Focus
+
+- Real CGM data loading and preprocessing
+- Two clear UseCases with direct CGM-to-insulin policies
+- Dynamic plotting based on the loaded time series
+- Minimal, readable Streamlit UI without unnecessary sliders
 
 ---
 
