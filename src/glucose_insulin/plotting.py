@@ -25,6 +25,7 @@ def build_policy_figure(
     time_min: NDArray[np.float64],
     glucose_mmol_l: NDArray[np.float64],
     insulin_rate: NDArray[np.float64],
+    glucose_simulated_mmol_l: NDArray[np.float64] | None = None,
 ) -> Figure:
     """Erzeugt die Standardfigur für den Digital-Shadow-Use-Case.
 
@@ -32,14 +33,23 @@ def build_policy_figure(
         time_min: Zeitvektor [min].
         glucose_mmol_l: Gemessene CGM-Zeitreihe [mmol/L].
         insulin_rate: Berechnete Insulin-Zeitreihe [pmol/L/min].
+        glucose_simulated_mmol_l: Optionale simulierte Glukose-Zeitreihe
+            [mmol/L], die sich aus der Wirkung von insulin_rate ergibt.
 
     Returns:
-        Matplotlib-Figur mit Messung und Insulinentscheidung.
+        Matplotlib-Figur mit Messung, Simulation und Insulinentscheidung.
     """
     if time_min.shape != glucose_mmol_l.shape:
         raise ValueError("time_min and glucose_mmol_l must have same shape")
     if time_min.shape != insulin_rate.shape:
         raise ValueError("time_min and insulin_rate must have same shape")
+    if (
+        glucose_simulated_mmol_l is not None
+        and time_min.shape != glucose_simulated_mmol_l.shape
+    ):
+        raise ValueError(
+            "time_min and glucose_simulated_mmol_l must have same shape"
+        )
 
     figure_size = _figure_size_from_time(time_min)
     figure, axes = plt.subplots(2, 1, figsize=figure_size, sharex=True)
@@ -51,6 +61,15 @@ def build_policy_figure(
         color="tab:blue",
         linewidth=2.0,
     )
+    if glucose_simulated_mmol_l is not None:
+        axes[0].plot(
+            time_min,
+            glucose_simulated_mmol_l,
+            label="Simulierte Glukose nach Modell-Insulin",
+            color="tab:red",
+            linewidth=2.0,
+            linestyle="--",
+        )
     axes[0].set_ylabel("Glukose [mmol/L]")
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
@@ -68,7 +87,9 @@ def build_policy_figure(
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
 
-    figure.suptitle("Digital Shadow: Messung und Insulinentscheidung")
+    figure.suptitle(
+        "Digital Shadow: Messung, Simulation und Insulinentscheidung"
+    )
     figure.tight_layout()
     return figure
 

@@ -27,33 +27,33 @@ from glucose_insulin.preprocessing import (
 DATA_PATH = Path(__file__).resolve().parent / "data" / "CGM_Werte.csv"
 
 
-def _run_use_case_1(time_min: np.ndarray, glucose_mmol_l: np.ndarray):
-    """Berechnet den autonomen Insulinverlauf für UseCase 1."""
-    model = GlucoseInsulinModel(
+def _build_use_case_1_model(glucose_mmol_l: np.ndarray) -> GlucoseInsulinModel:
+    """Konfiguriert das Modell für UseCase 1 (autonom)."""
+    return GlucoseInsulinModel(
         target_mmol_l=float(np.median(glucose_mmol_l)),
         kp=0.25,
         max_rate=5.0,
         prediction_horizon_min=15.0,
     )
-    return model.build_profile(time_min, glucose_mmol_l)
 
 
-def _run_use_case_2(time_min: np.ndarray, glucose_mmol_l: np.ndarray):
-    """Berechnet den assistiven Insulinverlauf für UseCase 2."""
+def _build_use_case_2_model(
+    time_min: np.ndarray, glucose_mmol_l: np.ndarray
+) -> GlucoseInsulinModel:
+    """Konfiguriert das Modell für UseCase 2 (assistiv)."""
 
     def patient_profile(current_time_min: float) -> float:
         if current_time_min < float(time_min[-1]) * 0.35:
-            return 1.5
+            return 0.0
         return 0.0
 
-    model = GlucoseInsulinModel(
+    return GlucoseInsulinModel(
         patient_profile=patient_profile,
-        alert_threshold=float(np.percentile(glucose_mmol_l, 80)),
+        alert_threshold=16.0,
         kp=0.18,
         max_rate=5.0,
         prediction_horizon_min=15.0,
     )
-    return model.build_profile(time_min, glucose_mmol_l)
 
 
 def main() -> None:
@@ -84,24 +84,30 @@ def main() -> None:
     )
 
     if use_case == "UseCase 1: autonom":
-        insulin_rate = _run_use_case_1(series.time_min, smoothed_glucose)
+        model = _build_use_case_1_model(smoothed_glucose)
         st.subheader("UseCase 1: Autonome Insulinregelung")
         st.write(
             "Das System dosiert selbstständig anhand des aktuellen Verlaufs "
             "und einer kurzen Vorhersage über 15 Minuten."
         )
     else:
-        insulin_rate = _run_use_case_2(series.time_min, smoothed_glucose)
+        model = _build_use_case_2_model(series.time_min, smoothed_glucose)
         st.subheader("UseCase 2: Assistive Insulinregelung")
         st.write(
             "Der Patient gibt zunächst selbst Insulin ab, danach greift das "
             "System bei Vergessen oder hohem Glukosetrend ein."
         )
 
+    insulin_rate = model.build_profile(series.time_min, smoothed_glucose)
+    glucose_simulated = model.simulate_glucose_with_insulin(
+        series.time_min, smoothed_glucose, insulin_rate
+    )
+
     figure = build_policy_figure(
         series.time_min,
         series.glucose_mmol_l,
         insulin_rate,
+        glucose_simulated_mmol_l=glucose_simulated,
     )
     st.pyplot(figure, clear_figure=True)
 
