@@ -207,3 +207,34 @@ class GlucoseInsulinModel:
             glucose_measured_mmol_l - self.isf_mmol_per_iu * insulin_effect
         )
         return np.maximum(glucose_simulated, 2.5)
+
+    def forecast_with_prophet(
+        self,
+        timestamps: list,
+        glucose: NDArray[np.float64],
+        horizon_min: float | None = None,
+        days: int = 5,
+    ):
+        """Simple Prophet forecast for the given glucose series.
+
+        Predict the next `days` calendar days at hourly resolution.
+
+        Args:
+            timestamps: List of datetimes for the measurements.
+            glucose: Array with glucose values [mmol/L].
+            horizon_min: Ignored (kept for compatibility).
+            days: Number of days to forecast ahead.
+
+        Returns:
+            Tuple of (Prophet model, forecast DataFrame).
+        """
+        # local imports keep the top-level module lightweight
+        import pandas as pd
+        from prophet import Prophet  # type: ignore[import]
+
+        df = pd.DataFrame({"ds": pd.to_datetime(timestamps), "y": glucose})
+        m = Prophet(daily_seasonality=True, weekly_seasonality=False)
+        m.fit(df)
+        future = m.make_future_dataframe(periods=24 * int(days), freq="h")
+        forecast = m.predict(future)
+        return m, forecast

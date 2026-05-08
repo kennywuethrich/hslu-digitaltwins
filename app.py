@@ -154,6 +154,15 @@ def main() -> None:
     )
     st.pyplot(figure, clear_figure=True)
 
+    # Prophet forecast (5 days) and plot using Prophet's built-in plot
+    prophet_model, forecast_df = model.forecast_with_prophet(
+        series.timestamps,
+        smoothed_glucose,
+        days=5,
+    )
+    prophet_fig = prophet_model.plot(forecast_df)
+    st.pyplot(prophet_fig, clear_figure=True)
+
     daily_figure = build_daily_glucose_overlay_figure(
         series.timestamps,
         series.glucose_mmol_l,
