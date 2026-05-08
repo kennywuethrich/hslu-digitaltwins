@@ -24,7 +24,20 @@ from glucose_insulin.preprocessing import (
     moving_average,
 )
 
-DATA_PATH = Path(__file__).resolve().parent / "data" / "CGM_Werte.csv"
+DATA_PATH = (
+    Path(__file__).resolve().parent / "data" / "CGM_data_diab1_short.csv"
+)
+
+
+def _list_dataset_paths() -> list[Path]:
+    """Gibt alle verfügbaren CGM-Datensätze im data-Ordner zurück."""
+    data_dir = Path(__file__).resolve().parent / "data"
+    return sorted(data_dir.glob("*.csv"))
+
+
+def _format_dataset_label(dataset_path: Path) -> str:
+    """Formatiert einen Datensatzpfad für die Anzeige im Dropdown."""
+    return dataset_path.name
 
 
 def _build_use_case_1_model(glucose_mmol_l: np.ndarray) -> GlucoseInsulinModel:
@@ -65,7 +78,41 @@ def main() -> None:
         "autonome Insulinabgabe und assistive Eingriffe bei Vergessen."
     )
 
-    series = load_cgm_series(DATA_PATH)
+    dataset_paths = _list_dataset_paths()
+    if not dataset_paths:
+        raise FileNotFoundError("No CSV files found in the data directory")
+
+    dataset_col, use_case_col, threshold_col = st.columns([1.2, 1.4, 1.2])
+    with dataset_col:
+        selected_dataset = st.selectbox(
+            "Datensatz",
+            dataset_paths,
+            format_func=_format_dataset_label,
+            index=min(
+                [
+                    index
+                    for index, candidate in enumerate(dataset_paths)
+                    if candidate.name == DATA_PATH.name
+                ]
+                or [0]
+            ),
+        )
+    with use_case_col:
+        use_case = st.radio(
+            "UseCase",
+            ["UseCase 1: autonom", "UseCase 2: assistiv"],
+            horizontal=True,
+        )
+    with threshold_col:
+        alert_threshold = st.number_input(
+            "alert_threshold für UseCase 2",
+            min_value=0.0,
+            max_value=30.0,
+            value=16.0,
+            step=0.1,
+        )
+
+    series = load_cgm_series(selected_dataset)
     smoothed_glucose = moving_average(series.glucose_mmol_l, window=5)
     first_derivative, second_derivative = derivatives(
         series.time_min,
@@ -73,14 +120,9 @@ def main() -> None:
     )
 
     st.info(
-        "Der Plot passt sich automatisch an die geladene Zeitreihe an. "
-        "Es gibt keine festen Slider für Simulationsdauer oder Modellparameter."
-    )
-
-    use_case = st.radio(
-        "UseCase",
-        ["UseCase 1: autonom", "UseCase 2: assistiv"],
-        horizontal=True,
+        "Der Plot passt sich automatisch an die gewählte Zeitreihe an. "
+        "Dataset und alert_threshold können direkt neben den UseCases gewählt "
+        "werden."
     )
 
     if use_case == "UseCase 1: autonom":
@@ -92,6 +134,7 @@ def main() -> None:
         )
     else:
         model = _build_use_case_2_model(series.time_min, smoothed_glucose)
+        model.alert_threshold = float(alert_threshold)
         st.subheader("UseCase 2: Assistive Insulinregelung")
         st.write(
             "Der Patient gibt zunächst selbst Insulin ab, danach greift das "
