@@ -7,7 +7,6 @@ from matplotlib.collections import LineCollection
 from matplotlib.figure import Figure
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from numpy.typing import NDArray
 
 
@@ -112,7 +111,7 @@ def build_daily_glucose_overlay_figure(
         glucose_mmol_l: Gemessene Glukose [mmol/L].
 
     Returns:
-        Matplotlib-Figur mit dünnen Tageslinien und Mittelwertlinie.
+        Matplotlib-Figur mit dünnen Tageslinien und Medianlinie.
     """
     if len(timestamps) != glucose_mmol_l.shape[0]:
         raise ValueError("timestamps and glucose_mmol_l must have same length")
@@ -149,23 +148,31 @@ def build_daily_glucose_overlay_figure(
         )
         axis.add_collection(collection)
 
-    sns.lineplot(
-        data=frame,
-        x="minute_of_day",
-        y="glucose_mmol_l",
-        estimator="mean",
-        errorbar=None,
+    bin_width_min = 5.0
+    frame["minute_bin"] = (
+        np.round(frame["minute_of_day"] / bin_width_min) * bin_width_min
+    )
+    median_curve = (
+        frame.groupby("minute_bin", sort=True)["glucose_mmol_l"]
+        .median()
+        .reset_index()
+        .sort_values("minute_bin")
+    )
+
+    axis.plot(
+        median_curve["minute_bin"],
+        median_curve["glucose_mmol_l"],
         color="tab:blue",
         linewidth=2.8,
-        ax=axis,
         zorder=3,
-        legend=False,
+        label="Median-Wert",
     )
+    axis.legend()
 
     axis.set_xlim(0.0, 24.0 * 60.0)
     axis.set_xlabel("Zeit im Tag [min]")
     axis.set_ylabel("Glukose [mmol/L]")
-    axis.set_title("Tagesprofil der Glukose: dünne Tage, dicke Mittelkurve")
+    axis.set_title("Tagesprofil der Glukose: dünne Tage, Mediankurve")
     axis.grid(True, alpha=0.25)
     axis.set_xticks([0, 360, 720, 1080, 1440])
     axis.set_xticklabels(["00:00", "06:00", "12:00", "18:00", "24:00"])
