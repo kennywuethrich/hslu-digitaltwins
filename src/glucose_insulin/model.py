@@ -233,7 +233,7 @@ class GlucoseInsulinModel:
         from prophet import Prophet  # type: ignore[import]
 
         df = pd.DataFrame({"ds": pd.to_datetime(timestamps), "y": glucose})
-        m = Prophet(daily_seasonality=True, weekly_seasonality=False)
+        m = Prophet(daily_seasonality=True, weekly_seasonality=False, changepoint_prior_scale=0.05)
         m.fit(df)
         future = m.make_future_dataframe(periods=24 * int(days), freq="h")
         forecast = m.predict(future)
