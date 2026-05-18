@@ -176,8 +176,7 @@ def main() -> None:
     col4.metric("Krümmung Ende", f"{float(second_derivative[-1]):.3f}")
 
     st.caption(
-        "Hinweis: Die Simulation ist ein vereinfachter Digital Shadow und "
-        "kein validierter medizinischer Zwilling."
+        "Hinweis: Die Simulation ist nur ein vereinfachter Digital Shadow."
     )
 
 
