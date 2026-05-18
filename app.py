@@ -44,7 +44,7 @@ def _build_use_case_1_model(glucose_mmol_l: np.ndarray) -> GlucoseInsulinModel:
     """Konfiguriert das Modell für UseCase 1 (autonom)."""
     return GlucoseInsulinModel(
         target_mmol_l=float(np.median(glucose_mmol_l)),
-        kp=0.25,
+        kp=0.1,
         max_rate=5.0,
         prediction_horizon_min=15.0,
     )
@@ -160,6 +160,16 @@ def main() -> None:
         smoothed_glucose,
         days=5,
     )
+    
+    import matplotlib.pyplot as plt
+
+    trend_fig, ax = plt.subplots()
+    ax.plot(forecast_df["ds"], forecast_df["trend"], label="Prophet Trend")
+    ax.set_xlabel("Zeit")
+    ax.set_ylabel("Glukose [mmol/L]")
+    ax.legend()
+    st.pyplot(trend_fig, clear_figure=True)
+    
     prophet_fig = prophet_model.plot(forecast_df)
     st.pyplot(prophet_fig, clear_figure=True)
 
