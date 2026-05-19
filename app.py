@@ -161,14 +161,6 @@ def main() -> None:
         days=5,
     )
     
-    import matplotlib.pyplot as plt
-
-    trend_fig, ax = plt.subplots()
-    ax.plot(forecast_df["ds"], forecast_df["trend"], label="Prophet Trend")
-    ax.set_xlabel("Zeit")
-    ax.set_ylabel("Glukose [mmol/L]")
-    ax.legend()
-    st.pyplot(trend_fig, clear_figure=True)
     
     prophet_fig = prophet_model.plot(forecast_df)
     st.pyplot(prophet_fig, clear_figure=True)
