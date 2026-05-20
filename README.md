@@ -45,7 +45,6 @@ app.py               – Streamlit-Oberfläche mit echter Zeitreihe
 ## Setup
 
 ```bash
-conda activate dgtwins
 pip install -r requirements.txt
 ```
 
@@ -80,7 +79,3 @@ flowchart LR
     model --> plot[Dynamic Plot]
     preprocess --> plot
 ```
-
-## Code Style
-
-Google Python Style Guide · Black (line-length 79) · mypy strict · pylint
